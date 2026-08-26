@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RobinGirls</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --gold: #f2c14e;
+    --gold-dim: #8a6a1f;
+    --bg: #0a070f;
+    --bg-mid: #120c1c;
+    --ink: #f3ecff;
+    --muted: #9a8fb5;
+    --panel: #14101f;
+    --border: #2a2140;
+  }
+  * { box-sizing: border-box; margin:0; padding:0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, .pixel { font-family: 'Press Start 2P', monospace; }
+  img { max-width: 100%; display:block; image-rendering: pixelated; }
+
+  /* ---------------- Loading screen ---------------- */
+  #loading-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: radial-gradient(ellipse at 50% 40%, #1a1226 0%, #050308 75%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 22px; text-align:center; padding: 24px;
+    transition: opacity 0.8s ease;
+  }
+  #loading-screen.fading { opacity: 0; pointer-events: none; }
+  .qmark {
+    font-size: clamp(4rem, 16vw, 9rem);
+    color: #fff;
+    text-shadow:
+      -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000,
+      -4px 0 0 #000, 4px 0 0 #000, 0 -4px 0 #000, 0 4px 0 #000,
+      0 0 30px rgba(242,193,78,0.55);
+    animation: qfloat 3s ease-in-out infinite;
+  }
+  @keyframes qfloat { 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-14px);} }
+  #loading-text { font-family:'Press Start 2P'; font-size: 0.85rem; color: var(--gold); letter-spacing: 0.15em; }
+  #loading-text::after { content: attr(data-dots); display:inline-block; width: 1.5em; text-align:left; }
+  .pixel-bar {
+    width: min(260px, 60vw); height: 18px; border: 3px solid var(--gold-dim);
+    background: #000; padding: 3px; display:flex; gap: 3px;
+  }
+  .pixel-bar span { flex:1; background: transparent; }
+  .pixel-bar span.on { background: var(--gold); box-shadow: 0 0 8px rgba(242,193,78,0.8); }
+  #reveal-btn {
+    opacity: 0; pointer-events: none; transition: opacity 0.6s ease;
+    margin-top: 6px;
+  }
+  #reveal-btn.ready { opacity: 1; pointer-events: auto; }
+
+  #light-burst {
+    position: fixed; left:50%; top:50%; width:0; height:0; z-index:9998;
+    transform: translate(-50%,-50%); border-radius: 50%; pointer-events:none;
+    background: radial-gradient(circle, #fff8e0 0%, #ffcf5c 30%, rgba(242,193,78,0.15) 60%, transparent 72%);
+    transition: width 1.15s ease, height 1.15s ease, opacity 0.7s ease 0.55s;
+    opacity: 1;
+  }
+  #light-burst.burst { width: 260vmax; height: 260vmax; opacity: 0; }
+
+  /* ---------------- Buttons ---------------- */
+  .btn {
+    position: relative; overflow:hidden; display:inline-flex; align-items:center; gap:10px;
+    font-family:'Press Start 2P'; font-size: 0.75rem; letter-spacing: 0.05em;
+    color: #1a1206; background: linear-gradient(180deg, #ffe9a8, var(--gold) 55%, #b8862a);
+    border: none; padding: 1em 1.6em; cursor:pointer; text-decoration:none;
+    box-shadow: 0 0 0 rgba(242,193,78,0);
+    transition: transform 0.15s ease, box-shadow 0.25s ease;
+  }
+  .btn:hover { transform: translateY(-3px); box-shadow: 0 0 26px rgba(242,193,78,0.65), 0 0 60px rgba(242,193,78,0.25); }
+  .btn .sheen {
+    position:absolute; top:0; left:-70%; width:35%; height:100%;
+    background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%);
+    transform: skewX(-20deg); transition: left 0.5s ease; pointer-events:none;
+  }
+  .btn:hover .sheen { left: 130%; }
+  .btn-outline {
+    background: transparent; color: var(--gold); border: 2px solid var(--gold-dim);
+  }
+  .btn-outline:hover { box-shadow: 0 0 18px rgba(242,193,78,0.45); border-color: var(--gold); }
+
+  /* ---------------- Layout ---------------- */
+  .site-content { opacity: 0; transform: translateY(24px); transition: opacity 1s ease, transform 1s ease; }
+  body.revealed .site-content { opacity: 1; transform: translateY(0); }
+
+  nav {
+    position: sticky; top:0; z-index: 50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 16px 5vw; background: rgba(10,7,15,0.85); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .logo { font-family:'Press Start 2P'; font-size: 0.9rem; color: var(--gold); }
+
+  header.hero { position:relative; overflow:hidden; }
+  .hero-banner-wrap { position:relative; width:100%; }
+  .hero-banner-wrap img { width:100%; height:auto; }
+  .sparkle {
+    position:absolute; width:3px; height:3px; background:#fff; border-radius:50%;
+    box-shadow: 0 0 6px 1px rgba(255,255,255,0.8);
+    animation: twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%,100%{ opacity:0.15; transform:scale(1);} 50%{ opacity:1; transform:scale(1.6);} }
+
+  .hero-info {
+    text-align:center; padding: 5vh 5vw 6vh; display:flex; flex-direction:column; align-items:center; gap: 18px;
+  }
+  .hero-info .tagline { color: var(--muted); font-size: 1.3rem; max-width: 640px; }
+  .stat-row { display:flex; gap: 28px; flex-wrap:wrap; justify-content:center; margin: 6px 0; }
+  .stat { text-align:center; }
+  .stat .n { font-family:'Press Start 2P'; font-size: 1.1rem; color: var(--gold); text-shadow: 0 0 10px rgba(242,193,78,0.5); }
+  .stat .l { font-size: 0.95rem; color: var(--muted); letter-spacing: 0.1em; }
+
+  section { padding: 8vh 5vw; max-width: 1280px; margin: 0 auto; }
+  .section-heading { text-align:center; margin-bottom: 4vh; }
+  .section-heading h2 { font-size: clamp(1.1rem, 2.4vw, 1.6rem); color: var(--ink); }
+  .section-heading p { color: var(--muted); margin-top: 10px; font-size: 1.2rem; }
+
+  .reveal-fade { opacity:0; transform: translateY(24px); transition: opacity 0.8s ease, transform 0.8s ease; }
+  .reveal-fade.in { opacity:1; transform:translateY(0); }
+
+  /* ---------------- Gallery ---------------- */
+  .gallery {
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px;
+  }
+  .card {
+    position:relative; background: var(--panel); border: 2px solid var(--border);
+    padding: 10px; cursor:pointer; transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .card:hover { transform: translateY(-6px); border-color: var(--accent, var(--gold)); box-shadow: 0 0 24px var(--glow, rgba(242,193,78,0.35)); }
+  .card .frame { aspect-ratio: 1/1; overflow:hidden; background:#000; }
+  .card .frame img { width:100%; height:100%; object-fit: cover; transition: transform 0.4s ease; }
+  .card:hover .frame img { transform: scale(1.06); }
+  .card .cap { text-align:center; padding-top: 10px; }
+  .card .cap .name { font-family:'Press Start 2P'; font-size: 0.68rem; color: var(--ink); }
+  .card .cap .cls { font-size: 0.95rem; color: var(--muted); letter-spacing: 0.06em; }
+  .card.locked { cursor:default; }
+  .card.locked .cap .name { color: var(--muted); }
+  .card.locked:hover { transform:none; border-color: var(--border); box-shadow:none; }
+
+  /* ---------------- Modal ---------------- */
+  .modal-overlay {
+    position: fixed; inset:0; z-index: 200; background: rgba(4,2,8,0.92);
+    display:flex; align-items:center; justify-content:center; padding: 24px;
+    opacity:0; pointer-events:none; transition: opacity 0.3s ease;
+  }
+  .modal-overlay.active { opacity:1; pointer-events:auto; }
+  .modal-panel {
+    width: 100%; max-width: 560px; background: var(--panel); border: 2px solid var(--accent, var(--gold));
+    box-shadow: 0 0 50px var(--glow, rgba(242,193,78,0.35));
+    padding: 28px; display:flex; flex-direction:column; align-items:center; gap: 16px;
+    transform: scale(0.85); transition: transform 0.4s cubic-bezier(.2,.8,.2,1);
+  }
+  .modal-overlay.active .modal-panel { transform: scale(1); }
+  .modal-panel .frame { width: min(220px, 60vw); aspect-ratio:1/1; border: 3px solid var(--accent, var(--gold)); overflow:hidden; }
+  .modal-panel .frame img { width:100%; height:100%; object-fit:cover; }
+  .modal-panel h3 { font-family:'Press Start 2P'; font-size: 1.1rem; color: var(--accent, var(--gold)); text-align:center; }
+  .modal-panel .cls { color: var(--muted); letter-spacing: 0.1em; font-size:1.1rem; margin-top:-10px; }
+  .modal-panel p { font-size: 1.25rem; line-height: 1.5; text-align:center; color: #ded6f2; max-width: 460px; }
+  .modal-close { margin-top: 4px; }
+
+  /* ---------------- About / Lore ---------------- */
+  .lore {
+    background: var(--panel); border: 1px solid var(--border); padding: 5vh 6vw;
+  }
+  .lore h2 { color: var(--gold); text-align:center; font-size: clamp(1rem, 2.2vw, 1.4rem); margin-bottom: 22px; }
+  .lore p { font-size: 1.3rem; line-height: 1.7; color: #d9d0ef; max-width: 760px; margin: 0 auto 14px; text-align:center; }
+  .lore p:last-child { color: var(--gold); font-family:'Press Start 2P'; font-size: 0.85rem; letter-spacing: 0.05em; margin-top: 20px; }
+
+  .token-announce {
+    background: linear-gradient(180deg, rgba(242,193,78,0.08), var(--panel) 60%);
+    border: 2px solid var(--gold-dim); padding: 5vh 6vw; text-align:center;
+    box-shadow: 0 0 40px rgba(242,193,78,0.12);
+  }
+  .token-tag {
+    display:inline-block; font-family:'Press Start 2P'; font-size: 0.6rem; letter-spacing: 0.1em;
+    color: #1a1206; background: var(--gold); padding: 0.5em 1em; margin-bottom: 18px;
+  }
+  .token-announce h2 { color: var(--gold); font-size: clamp(1rem, 2.2vw, 1.4rem); margin-bottom: 18px; text-shadow: 0 0 12px rgba(242,193,78,0.4); }
+  .token-announce p { font-size: 1.3rem; line-height: 1.7; color: #d9d0ef; max-width: 720px; margin: 0 auto 14px; }
+  .token-announce .token-note { color: var(--gold); font-family:'Press Start 2P'; font-size: 0.8rem; letter-spacing: 0.05em; margin-top: 20px; }
+
+  footer {
+    text-align:center; padding: 5vh 5vw 6vh; color: var(--muted); font-size: 1.1rem;
+    border-top: 1px solid var(--border);
+  }
+  footer .pixel { color: var(--gold-dim); font-size: 0.65rem; display:block; margin-bottom: 10px; }
+
+  @media (max-width: 640px) {
+    body { font-size: 18px; }
+    .stat-row { gap: 18px; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="loading-screen">
+    <div class="qmark">?</div>
+    <div id="loading-text" data-dots="...">LOADING</div>
+    <div class="pixel-bar" id="pixel-bar"></div>
+    <button class="btn" id="reveal-btn"><span class="sheen"></span>I LET'S SEE</button>
+  </div>
+  <div id="light-burst"></div>
+
+  <div class="site-content">
+
+    <nav>
+      <div class="logo">ROBINGIRLS</div>
+      <a class="btn btn-outline" href="https://opensea.io/collection/robin-girls/edit/overview" target="_blank" rel="noopener" style="font-size:0.6rem; padding:0.8em 1.1em;"><span class="sheen"></span>MINT NOW</a>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-banner-wrap" id="hero-banner">
+        <img src="img/banner1.png" alt="RobinGirls" />
+      </div>
+      <div class="hero-info">
+        <p class="tagline">2,000 pixel souls, each dropped into her own corner of a hand built fantasy world. Minted on Robinhood Chain.</p>
+        <div class="stat-row">
+          <div class="stat"><div class="n">2,000</div><div class="l">SUPPLY</div></div>
+          <div class="stat"><div class="n">8+</div><div class="l">WORLDS</div></div>
+          <div class="stat"><div class="n">RH</div><div class="l">ROBINHOOD CHAIN</div></div>
+        </div>
+        <a class="btn" id="join" href="https://opensea.io/collection/robin-girls/edit/overview" target="_blank" rel="noopener"><span class="sheen"></span>MINT NOW</a>
+      </div>
+    </header>
+
+    <section id="gallery">
+      <div class="section-heading reveal-fade">
+        <h2>THE FIRST TO STEP OUT OF THE FOG</h2>
+        <p>2,000 girls are hiding in this world. Here are a few who already showed their faces. Click one.</p>
+      </div>
+      <div class="gallery" id="gallery-grid"></div>
+    </section>
+
+    <section>
+      <div class="token-announce reveal-fade">
+        <div class="token-tag">HOLDER TOKEN</div>
+        <h2>A TOKEN IS COMING FOR HOLDERS</h2>
+        <p>RobinGirls is more than art. A token is launching for this collection, and the entire supply goes to the people already holding a RobinGirl. Not the team, not a presale, not insiders getting the good seats first.</p>
+        <p>Every RobinGirl sitting in your wallet when it launches is a claim on that supply. The earlier you're in, the more of the world you actually own.</p>
+        <p class="token-note">hold the girl, claim the supply</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="lore reveal-fade">
+        <h2>THE STORY</h2>
+        <p>2000 pixel souls scattered across a hand built fantasy world, minted on Robinhood Chain. Every RobinGirl is a fully illustrated portrait dropped into her own biome: desert ruins under a dying sun, a frozen castle of ice, a blacksmith's forge glowing at midnight, a mushroom forest thick with secrets, a library stacked with forbidden books.</p>
+        <p>No template faces here. Hair, eyes, outfit, class, and the entire backdrop shift from girl to girl, and the world she's placed in is part of what makes her rare. Explorer, frost mage, smith, rogue, scholar, and more all coexist in the same collection, each one pixel perfect and one of a kind.</p>
+        <p>2000 minted, no more ever added. Hold one and you're not just owning a picture, you're holding a piece of a world that keeps expanding around her.</p>
+        <p>ROBINGIRLS. 2000 GIRLS. ONE WORLD.</p>
+      </div>
+    </section>
+
+    <footer>
+      <span class="pixel">ROBINGIRLS</span>
+      2,000 supply &middot; Robinhood Chain &middot; art belongs to the ones who hold it
+    </footer>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal-panel" id="modal-panel">
+      <div class="frame"><img id="modal-img" src="" alt=""></div>
+      <h3 id="modal-name"></h3>
+      <div class="cls" id="modal-class"></div>
+      <p id="modal-bio"></p>
+      <button class="btn modal-close" id="modal-close"><span class="sheen"></span>CLOSE</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // ---- fake loading bar ----
+  var bar = document.getElementById('pixel-bar');
+  var segments = 14;
+  for (var i=0;i<segments;i++){ var s=document.createElement('span'); bar.appendChild(s); }
+  var filled = 0;
+  var fillTimer = setInterval(function(){
+    if (filled >= segments) { clearInterval(fillTimer); document.getElementById('reveal-btn').classList.add('ready'); return; }
+    bar.children[filled].classList.add('on');
+    filled++;
+  }, 90);
+
+  var dotsEl = document.getElementById('loading-text');
+  var dotStates = ['.', '..', '...'];
+  var di = 0;
+  setInterval(function(){ di = (di+1) % dotStates.length; dotsEl.setAttribute('data-dots', dotStates[di]); }, 450);
+
+  // ---- reveal ----
+  document.getElementById('reveal-btn').addEventListener('click', function(){
+    document.getElementById('light-burst').classList.add('burst');
+    document.getElementById('loading-screen').classList.add('fading');
+    document.body.classList.add('revealed');
+    setTimeout(function(){ document.getElementById('loading-screen').style.display='none'; }, 900);
+  });
+
+  // ---- sparkles in hero ----
+  var heroBanner = document.getElementById('hero-banner');
+  for (var k=0;k<18;k++){
+    var sp = document.createElement('div');
+    sp.className = 'sparkle';
+    sp.style.left = (Math.random()*100)+'%';
+    sp.style.top = (Math.random()*70)+'%';
+    sp.style.animationDelay = (Math.random()*3)+'s';
+    heroBanner.appendChild(sp);
+  }
+
+  // ---- gallery data ----
+  var girls = [
+    { img:'img/set1_top_left.png', name:'DUSK', cls:'Ruins Explorer', accent:'#e8963f',
+      bio:"Reads dead languages for fun and broken temple traps for profit. Every ruin she's cracked open, she's left richer, and the ruin's had worse." },
+    { img:'img/set1_top_right.png', name:'RIME', cls:'Frost Weaver', accent:'#6fd3ff',
+      bio:"Grew up in a castle built from something colder than stone. She never has to raise her voice, the temperature does that for her." },
+    { img:'img/set1_bottom_left.png', name:'NIGHTSHADE', cls:'Forest Rogue', accent:'#b06bff',
+      bio:"Knows exactly which mushroom kills and which one just makes you wish it had. Carries a blade and a bottle, rarely needs either twice." },
+    { img:'img/set1_bottom_right.png', name:'EMBER', cls:'Forge Smith', accent:'#ff7a45',
+      bio:"Built her own hammer before she built anything else. The forge doesn't scare her, she's the reason it's still lit at midnight." },
+    { img:'img/set2_bottom_left.png', name:'INKWELL', cls:'Arcane Scholar', accent:'#f2c14e',
+      bio:"Read every book in that library and disagreed with most of them. The bow in her hair is the only soft thing about her." },
+    { img:'img/set2_top_left.png', name:'STATIC', cls:'Neon Wanderer', accent:'#43e6c5',
+      bio:"Lives three blocks deep in a city that never turns its lights off. Doesn't trust anything that can't be hacked, promises included." },
+    { img:'img/set2_top_right.png', name:'HANA', cls:'Sakura Bloom', accent:'#ff8fc7',
+      bio:"Looks like spring, moves like she already decided how this ends. The petals fall for her, not the other way around." },
+    { img:'img/set2_bottom_right.png', name:'MOSS', cls:'Wild Druid', accent:'#5fbf6b',
+      bio:"Been in that forest so long the trees stopped noticing her. Everything green out there answers to her first." }
+  ];
+
+  var grid = document.getElementById('gallery-grid');
+  girls.forEach(function(g){
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.style.setProperty('--accent', g.accent);
+    card.style.setProperty('--glow', g.accent + '59');
+    card.innerHTML =
+      '<div class="frame"><img src="'+g.img+'" alt="'+g.name+'"></div>' +
+      '<div class="cap"><div class="name">'+g.name+'</div><div class="cls">'+g.cls+'</div></div>';
+    card.addEventListener('click', function(){ openModal(g); });
+    grid.appendChild(card);
+  });
+
+  for (var l=0; l<4; l++){
+    var locked = document.createElement('div');
+    locked.className = 'card locked';
+    locked.innerHTML =
+      '<div class="frame"><img src="img/pre-reveal.png" alt="locked"></div>' +
+      '<div class="cap"><div class="name">LOCKED</div><div class="cls">#????</div></div>';
+    grid.appendChild(locked);
+  }
+
+  function openModal(g){
+    document.getElementById('modal-img').src = g.img;
+    document.getElementById('modal-name').textContent = g.name;
+    document.getElementById('modal-class').textContent = g.cls;
+    document.getElementById('modal-bio').textContent = g.bio;
+    var panel = document.getElementById('modal-panel');
+    panel.style.setProperty('--accent', g.accent);
+    panel.style.setProperty('--glow', g.accent + '59');
+    document.getElementById('modal').classList.add('active');
+  }
+  document.getElementById('modal-close').addEventListener('click', function(){
+    document.getElementById('modal').classList.remove('active');
+  });
+  document.getElementById('modal').addEventListener('click', function(e){
+    if (e.target.id === 'modal') document.getElementById('modal').classList.remove('active');
+  });
+
+  // ---- scroll reveal ----
+  var faders = document.querySelectorAll('.reveal-fade');
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if (e.isIntersecting) e.target.classList.add('in'); });
+  }, { threshold: 0.15 });
+  faders.forEach(function(f){ io.observe(f); });
+})();
+</script>
+
+</body>
+</html>
